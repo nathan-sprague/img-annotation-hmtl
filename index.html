@@ -527,6 +527,7 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
   }
 
   function exportImg() {
+    document.getElementById("exportStatus").innerHTML = "Zipping images"
     addImgAnnotations()
     const reader = new FileReader();
     console.log("made new reader")
@@ -576,6 +577,8 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
+                    document.getElementById("exportStatus").innerHTML = "Done exporting images"
+
                   });
                 }
               });
