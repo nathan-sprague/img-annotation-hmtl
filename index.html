@@ -12,6 +12,8 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
 <span id="fileNum" style="position:absolute; top:450px; font-size:20px;">File Num: </span>
 <span id="annotMade" style="position:absolute; top:490px; font-size:20px;">Annotations made: 0</span>
 <span id="annotTime" style="position:absolute; top:530px; font-size:20px;">Time spent: 0</span>
+<span id="exportStatus" style="position:absolute; top:570px; font-size:20px;"></span>
+
 
 <canvas id="imgCanvas"width="600px" height="500px" style="position:absolute; left:200px; top:100px; border:solid;"></canvas>
 <canvas id="canvas"width="600px" height="500px" style="position:absolute; left:200px; top:100px; opacity:0.5"></canvas>
@@ -564,6 +566,7 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
                 tempCanvas.toBlob(function(blob) {
                 zip.file("annot_" + imgsMade + ".jpg", blob);
                 imgsMade += 1
+                document.getElementById("exportStatus").innerHTML = "Zipped: " + imgsMade + "/" + numAnnotations
                 if (imgsMade == numAnnotations){
                   zip.generateAsync({ type: "blob" }).then(content => {
                     const blob = new Blob([content], { type: "application/zip" });
