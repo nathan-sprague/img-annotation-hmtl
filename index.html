@@ -81,6 +81,7 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
     fileNum = 0
     addFile(fileNum)
     imgAnnotations = []
+    numAnnotations = 0
   });
    
   document.getElementById('annot-input').addEventListener('change', function() {
@@ -526,9 +527,26 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
     link.click();
   }
 
+  function countAnnoationsReal(){
+    realAnnotationsNum = 0
+    fNum = 0;
+    while (fNum < files.length){
+      file = files[fNum]
+      fNum += 1;
+      if (file.name in oldAnnotations) {
+        let annot = oldAnnotations[file.name]
+        realAnnotationsNum += annot.length;
+      }
+    }
+    console.log("annot", numAnnotations, realAnnotationsNum)
+    numAnnotations = realAnnotationsNum;
+    return realAnnotationsNum
+  }
+
   function exportImg() {
     document.getElementById("exportStatus").innerHTML = "Zipping images"
     addImgAnnotations()
+    countAnnoationsReal();
     const reader = new FileReader();
     console.log("made new reader")
     reader.addEventListener('load', function() {
