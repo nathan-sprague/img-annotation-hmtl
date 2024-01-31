@@ -7,121 +7,73 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
 <input type="button" id="next" value="next"><br>
 <!-- <input type="button" id="exportImg" value="export img"><br> -->
 <input type="button" id="exportJSON" value="export JSON"><br>
-<input type="button" id="exportImg" value="export images"><br>
+<!-- <input type="button" id="exportText" value="export Text"><br> -->
 
 <span id="fileNum" style="position:absolute; top:450px; font-size:20px;">File Num: </span>
-<span id="annotMade" style="position:absolute; top:490px; font-size:20px;">Annotations made: 0</span>
-<span id="annotTime" style="position:absolute; top:530px; font-size:20px;">Time spent: 0</span>
-<span id="exportStatus" style="position:absolute; top:570px; font-size:20px;"></span>
+<span id="annotTime" style="position:absolute; top:480px; font-size:20px;">Time spent: </span>
 
+<!-- <span id="annotMade" style="position:absolute; top:490px; font-size:20px;">Annotations made: 0</span> -->
 
 <canvas id="imgCanvas"width="600px" height="500px" style="position:absolute; left:200px; top:100px; border:solid;"></canvas>
-<canvas id="canvas"width="600px" height="500px" style="position:absolute; left:200px; top:100px; opacity:0.5"></canvas>
-<canvas id="canvasActive" width="600px" height="500px" style="position:absolute; left:200px; top:100px;"></canvas>
-<script src="jszip.js"></script>
-<script src="fileSaver.js"></script>
-
+<canvas id="canvas"width="605px" height="505px" style="position:absolute; left:200px; top:100px; opacity:0.5"></canvas>
+<canvas id="canvasActive" width="620px" height="520px" style="position:absolute; left:190px; top:90px;"></canvas>
+<br>
+<br>
 
 <script>
-  const input = document.getElementById('folder-input');
-  var files = [];
-  var allFileNames = [];
-  var fileNum = -1;
-  var fileName = ""
-  var drawing = true
-  var mouseDown = false
-  var imgAnnotations = []
-  var oldAnnotations = {}
-  var clickPts = []
-  var annotationStyle = 0 // 0=bounding box, 1=segmentation
-  var labelNum = 1
-  var selectedNum = -1
-  var makingPoly = false
-  var unsavedChanges = false;
-  var annotateSquares = true
-  var numAnnotations = 0
-  var scale = 1
-  var totalTime = 0;
-  var lastMoveTime = Date.now();
 
-  const padding = 0;
-  var labelColors = ["black", "red", "blue", "green", "pink", "yellow"];
+var annotType = 1; // 0 = bounding box, 1 = segmentation
+var imgNum = 0;
+const labelColors = ["red", "blue", "green", "pink", "yellow", "black"];
+var allAnnots = {"NA":[]};
+var currentPoly = [];
+const padding = 10;
+var selectedInd = -1
+var labelNum = 0;
+var scale = 1
+var currentImgName = "NA";
+var allFileNames = [];
+var files = [];
+var imgNum = 0;
+var lastMoveTime = 0;
 
-  function prepareCanvas(){
-    canvas = document.getElementById("imgCanvas")
-    canvasMarkup = document.getElementById("canvas")
-    canvasActive = document.getElementById("canvasActive")
+var totalTime = 0
 
-
-
-    if (annotationStyle == 1){
-      c = document.getElementById("canvas")
-      c.style.opacity="0.5"
-    }
-
-    document.onmousemove = function(event){
-      processMouseMove(event);
-
-    };
-    canvasActive.onmousedown = function(event){
-      processMouseDown(event);
-    };
-    document.onmouseup = function(event){
-      processMouseUp(event);
-    };
-  }
-
-  input.addEventListener('change', function() {
+const input = document.getElementById('folder-input');
+input.addEventListener('change', function() {
     files = this.files;
-    for (i in files){
-      allFileNames.push(files[i].name)
+    allAnnots = {};
+    for (i in files) {
+        allFileNames.push(files[i].name)
+        allAnnots[files[i].name] = [];
     }
     console.log("change", files)
-    console.log(files)
-    fileNum = 0
-    addFile(fileNum)
-    imgAnnotations = []
-    numAnnotations = 0
-  });
-   
-  document.getElementById('annot-input').addEventListener('change', function() {
-      console.log("filenames", allFileNames)
-      var fr=new FileReader();
-      fr.onload=function(){
-          oldAnnotations = JSON.parse(fr.result)
-          if (annotationStyle == 0){
-            for (i in oldAnnotations){
-              console.log("oa", i)
-              if (allFileNames.includes(i)){
-               numAnnotations += oldAnnotations[i].length
-              }
-            }
-          }
-          if (fileName in oldAnnotations){
-            let i = 0;
-            imgAnnotations = []
-            let oa = oldAnnotations[fileName]
-            console.log("reading scale", scale)
-            console.log("reading", oa)
-            while (i < oa.length){
-              imgAnnotations.push([[oa[i][0][0] * scale, oa[i][0][1] * scale], [oa[i][1][0] * scale, oa[i][1][1] * scale]])
-              i+=1;
-            }
-            console.log("read", imgAnnotations)
+    imgNum = 0
 
-          }
-
-          dispImg(0)
-      }
-        
-      fr.readAsText(this.files[0]);
-  })
+    addFile(imgNum)
+});
 
 
-  function addFile(fileNum){
+document.getElementById('annot-input').addEventListener('change', function() {
+    var fr=new FileReader();
+    fr.onload=function(){
+        allAnnots = JSON.parse(fr.result);
+        console.log("allAnnots", allAnnots)
+        if ("totalTime" in allAnnots){
+            totalTime = allAnnots["totalTime"]
+        }
+    }
+    fr.readAsText(this.files[0]);
+});
+
+
+
+function addFile(fileNum){
     file = files[fileNum]
+    console.log("file", file)
     const reader = new FileReader();
     fileName = file.name
+    currentImgName = file.name
     reader.addEventListener('load', function() {
       console.log(`File: ${file.name}`);
       
@@ -144,11 +96,14 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
           let maxWidth = window.innerWidth
           || document.documentElement.clientWidth
           || document.body.clientWidth;
+
+          maxWidth -= 20;
           let maxHeight = window.innerHeight
           || document.documentElement.clientHeight
           || document.body.clientHeight;
           maxWidth -= 200;
           maxHeight -= 100;
+          maxHeight -= 20;
           console.log("max", maxHeight, maxWidth)
 
           scale = Math.min(maxHeight/h, maxWidth/w)
@@ -159,39 +114,194 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
 
           canvas.width = image.width;
           canvas.height = image.height;
-          canvasMarkup.width = image.width;
-          canvasMarkup.height = image.height;
+          canvasMarkup.width = image.width+padding/2;
+          canvasMarkup.height = image.height+padding/2;
           canvasActive.width = image.width+padding*2
           canvasActive.height = image.height+padding*2
           const ctx = canvas.getContext('2d');
-          drawing = true;
           ctx.drawImage(image, 0, 0, image.width, image.height);
-          if (fileName in oldAnnotations){
-            let i = 0;
-            imgAnnotations = []
-            let oa = oldAnnotations[fileName]
-            console.log("reading scale", scale)
-            console.log("reading", oa)
-            while (i < oa.length){
-              imgAnnotations.push([[oa[i][0][0] * scale, oa[i][0][1] * scale], [oa[i][1][0] * scale, oa[i][1][1] * scale]])
-              i+=1;
-            }
-            console.log("read", imgAnnotations)
-
-          } else {
-            imgAnnotations = []
-          }
-
           dispImg(0)
-          document.getElementById("fileNum").innerHTML = "File Num: " + fileNum
+          document.getElementById("fileNum").innerHTML = "File Num: " + (fileNum + 1)
         }
       };
     });
     reader.readAsText(file);
-  }
+}
 
 
-  function dispImg(dispAmt){
+
+document.onkeydown = function(evt) {
+    evt = evt || window.event;
+
+    var charCode = evt.keyCode || evt.which;
+    console.log(charCode)
+
+    if (charCode == 13){
+        if (annotType == 1 && currentPoly.length > 3){
+            currentPoly.push(labelNum)
+            allAnnots[currentImgName].push(currentPoly);
+        }
+
+        currentPoly = [];
+        dispImg(0)
+    } else if (charCode == 39 || charCode == 32){
+      evt.preventDefault();
+      next()
+    } else if (charCode == 37){
+      evt.preventDefault();
+      previous()
+    } else if (charCode == 27 && currentPoly.length > 0){
+        currentPoly = [];
+        dispImg(0)
+    }
+
+
+
+}
+
+
+
+
+
+function prepareCanvas(){
+    canvas = document.getElementById("imgCanvas")
+    canvasMarkup = document.getElementById("canvas")
+    canvasActive = document.getElementById("canvasActive")
+
+    document.onmousemove = function(event){
+      processMouseMove(event);
+
+    };
+    canvasActive.onmousedown = function(event){
+      processMouseDown(event);
+    };
+    canvasActive.onmouseup = function(event){
+      processMouseUp(event);
+    };
+
+    canvasActive.onclick = function(event){
+      processMouseClick(event);
+    };
+
+}
+
+
+function getMousePosition(event){
+    let ca = document.getElementById("canvasActive")
+    let bound = ca.getBoundingClientRect();
+    let mouseSpot = [Math.round((event.clientX - bound.x - padding) / scale), Math.round((event.clientY - bound.y - padding)/scale)];
+    return mouseSpot;
+}
+
+
+function processMouseDown(event){
+    
+}
+
+function processMouseMove(event){
+    let duration = Date.now() - lastMoveTime;
+    lastMoveTime = Date.now()
+    if (duration < 20000){
+      totalTime += duration;
+    }
+
+    const [x, y] = getMousePosition(event)
+    if (currentPoly.length > 1){
+        currentPoly[currentPoly.length-1] = [x, y]
+    } 
+
+    dispImg(1)
+}
+
+function processMouseUp(event) {
+    if (event.button == 1){
+        if (annotType == 1 && currentPoly.length > 3){
+            currentPoly.push(labelNum)
+            allAnnots[currentImgName].push(currentPoly);
+        }
+
+        currentPoly = [];
+        dispImg(0)
+    }
+}
+
+function processMouseClick(event){
+    const [x, y] = getMousePosition(event)
+    if (currentPoly.length == 0){
+        currentPoly = [[x, y], [x, y]]
+    } else {
+        currentPoly.push([x, y])
+    }
+    console.log(x,y)
+    dispImg(1)
+     
+}
+
+
+function previous(){
+    if (imgNum > 0){
+        imgNum -= 1;
+        addFile(imgNum);
+        if (allFileNames[imgNum] in allAnnots){}
+        else {
+            allAnnots[allFileNames[imgNum]] = []
+        }
+    }
+} 
+
+function next(){
+    if (imgNum + 1 < allFileNames.length){
+        imgNum += 1;
+        addFile(imgNum);
+        if (allFileNames[imgNum] in allAnnots){}
+        else {
+            allAnnots[allFileNames[imgNum]] = []
+        }
+    }
+}
+
+
+
+function erase(){
+    const a = document.getElementById("erase")
+    if (a.value == "erase"){
+        labelNum = -1
+        a.value = "draw"
+    } else {
+        labelNum = 0
+        a.value = "erase"
+    }
+
+}
+
+function clear(){
+    allAnnots[currentImgName] = [];
+    dispImg(0);
+}
+
+function exportJSON(){
+    // Create element with <a> tag
+    const link = document.createElement("a");
+    console.log("allAnnots", allAnnots);
+    allAnnots["totalTime"] = totalTime;
+    let content = JSON.stringify(allAnnots)
+    console.log("content", content)
+    // Create a blog object with the file content which you want to add to the file
+    const file = new Blob([content], { type: 'application/JSON' });
+
+    // Add file content in the object URL
+    link.href = URL.createObjectURL(file);
+
+    // Add file name
+    link.download = "data.JSON";
+
+    // Add click event to <a> tag to save file.
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+
+function dispImg(dispAmt){
     if (dispAmt == undefined){
       dispAmt = 0;
     }
@@ -211,64 +321,50 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
     }
 
     ctxActive.clearRect(0, 0, canvasWidth+padding*2, canvasHeight+padding*2);
-    
-    
 
-    if (annotationStyle == 0){
-      if (dispAmt == 0){
-          document.getElementById("annotMade").innerHTML = "Annotations made: " + numAnnotations;
-        }
-      ctx.lineWidth = 4 ;
-      if (dispAmt < 1){
-        let i=0;
-        while (i < imgAnnotations.length){
-          let a = imgAnnotations[i]
-          if (selectedNum == i){
+    if (annotType == 0) {
+
+        // document.getElementById("annotMade").innerHTML = "Annotations made: " + numAnnotations;
+        
+        ctx.lineWidth = 4;
+        
+        for (i in allAnnots[currentImgName]) {
+          let a = allAnnots[currentImgName][i]
+          if (selectedInd == i) {
             ctx.strokeStyle = "green"
           } else{
             ctx.strokeStyle = "blue"
           }
           ctx.beginPath()
-          ctx.rect(a[0][0], a[0][1], a[1][0]-a[0][0], a[1][1]-a[0][1]);
-
+          ctx.rect(a[0][0]*scale, a[0][1]*scale, (a[1][0]-a[0][0])*scale, (a[1][1]-a[0][1])*scale);
           ctx.stroke()
-          i+=1;
         }
-      }
-      if (dispAmt >= 0){
-        if (mouseDown && clickPts.length > 0){
-          ctxActive.beginPath()
-          ctxActive.strokeStyle = "green";
-          ctxActive.rect(clickPts[0][0]+padding, clickPts[0][1]+padding, clickPts[1][0]-clickPts[0][0], clickPts[1][1]-clickPts[0][1]);
-          ctxActive.stroke()
-        }
-      }
-      ctx.lineWidth = 1;
-    } else if (annotationStyle == 1){
       
-      if (clickPts.length > 1){
+      ctx.lineWidth = 1;
+
+    } else if (annotType == 1){
+      
+      if (currentPoly.length > 1){
         ctxActive.beginPath()
         ctxActive.strokeStyle = labelColors[labelNum]
-       for (const i in clickPts){
-          if (i == 0){
-            ctxActive.moveTo(clickPts[i][0]+padding, clickPts[i][1]+padding);
-          } else {
-            ctxActive.lineTo(clickPts[i][0]+padding, clickPts[i][1]+padding);
-          }
+        for (const i in currentPoly) {
+            if (i == 0){
+                ctxActive.moveTo(currentPoly[i][0]*scale + padding, currentPoly[i][1]*scale + padding);
+            } else {
+                ctxActive.lineTo(currentPoly[i][0]*scale + padding, currentPoly[i][1]*scale + padding);
+            }
         }
         ctxActive.closePath()
         ctxActive.stroke()
       }
-
-      if (dispAmt == 0){
-        for (const ai in imgAnnotations){
-          const a = imgAnnotations[ai]
+        for (const ai in allAnnots[currentImgName]){
+          const a = allAnnots[currentImgName][ai];
           ctx.beginPath()
           for (const i in a){
             if (i == 0){
-              ctx.moveTo(a[i][0], a[i][1]);
+              ctx.moveTo(a[i][0]*scale, a[i][1]*scale);
             } else if (i == a.length-1){
-              if (a[i] == 0){
+              if (a[i] == -1){
                 ctx.globalCompositeOperation = "destination-out";
               } else {
                 ctx.globalCompositeOperation = "destination-over";
@@ -276,7 +372,7 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
                 ctx.strokeStyle = labelColors[a[i]]
               }
             } else {
-              ctx.lineTo(a[i][0], a[i][1]);
+              ctx.lineTo(a[i][0]*scale, a[i][1]*scale);
             }
 
           }
@@ -286,358 +382,23 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
           ctx.stroke()
         }
       }
-    }
-
-      ctx.beginPath()
-      // ctx.rect(0,0,1000, 1000)
-      ctx.fill()
-      ctx.stroke()
-
-
-  }
-
-
-  function processMouseDown(event){
-    mouseDown=true
-    let bound = document.getElementById("canvasActive").getBoundingClientRect();
-    mouseSpot = [event.clientX - bound.x-padding, event.clientY - bound.y-padding];
-    if (event.button == 0){
-      if (annotationStyle == 0){
-        clickPts.push([mouseSpot[0], mouseSpot[1]])
-        clickPts.push([mouseSpot[0], mouseSpot[1]])
-      } else if (annotationStyle == 1) {
-        clickPts.push([mouseSpot[0], mouseSpot[1]])
-        clickPts.push([mouseSpot[0], mouseSpot[1]])
-        makingPoly = true;
-      }
-    } else if (event.button == 1 && annotationStyle == 1){
-      if (clickPts.length > 2){
-        imgAnnotations.push(JSON.parse(JSON.stringify(clickPts)));
-        imgAnnotations[imgAnnotations.length-1].push(labelNum)
-        clickPts = []
-        makingPoly = false;
-        dispImg(0)
-      }
-    }
     
 
-  }
-
-  function processMouseMove(event){
-    
-    let duration = Date.now() - lastMoveTime;
-    lastMoveTime = Date.now()
-    if (duration < 20000){
-      totalTime += duration;
-    }
-    
-    
-    if (mouseDown){
-      let ca = document.getElementById("canvasActive")
-      let bound = ca.getBoundingClientRect();
-      let mouseSpot = [event.clientX - bound.x-padding, event.clientY - bound.y-padding];
-      mouseSpot[0] = Math.max(mouseSpot[0], 0)
-      mouseSpot[0] = Math.min(mouseSpot[0], ca.width - padding*2)
-      mouseSpot[1] = Math.max(mouseSpot[1], 0)
-      mouseSpot[1] = Math.min(mouseSpot[1], ca.height - padding*2)
-      if (annotationStyle == 0) {
-
-        clickPts[1] = [mouseSpot[0], mouseSpot[1]]
-        if (annotateSquares){
-          h = Math.abs(clickPts[0][1]-clickPts[1][1])
-          w = Math.abs(clickPts[0][0]-clickPts[1][0])
-          minDim = Math.min(h,w)
-          clickPts[1] = [clickPts[0][0] + minDim * Math.sign(clickPts[1][0]-clickPts[0][0]), clickPts[0][1] + minDim * Math.sign(clickPts[1][1]-clickPts[0][1])]
-        }
-        dispImg(1)
-      
-      }
-      event.preventDefault();
-
-    }
-    if (annotationStyle == 1 && makingPoly){
-      let ca = document.getElementById("canvasActive")
-      let bound = ca.getBoundingClientRect();
-      let mouseSpot = [event.clientX - bound.x-padding, event.clientY - bound.y-padding];
-      clickPts[clickPts.length-1] = [mouseSpot[0], mouseSpot[1]]
-      dispImg(1)
-    }
-  }
-
-  function processMouseUp(event){
-    if (mouseDown){
-      mouseDown = false;
-      selectedNum = -1
-      if (annotationStyle == 0){
-        if (Math.abs((clickPts[0][0]-clickPts[1][0])*(clickPts[0][1]-clickPts[1][1])) > 100){
-          imgAnnotations.push([[Math.min(clickPts[0][0], clickPts[1][0]), Math.min(clickPts[0][1], clickPts[1][1])], 
-                              [Math.max(clickPts[0][0], clickPts[1][0]), Math.max(clickPts[0][1], clickPts[1][1])]])
-          numAnnotations += 1;
-        } else {
-          selectedNum = -1
-          for (i in imgAnnotations){
-
-            let a = imgAnnotations[i]
-            if (clickPts[1][0]>a[0][0] && clickPts[1][0]<a[1][0] && clickPts[1][1]>a[0][1] && clickPts[1][1]<a[1][1]){
-              selectedNum = i;
-              console.log("selected")
-              break;
-            }
-          }
-        }
-        clickPts = []
-      }
-      dispImg(0)
-    }
-  }
-
-  document.onkeydown = function(evt) {
-    evt = evt || window.event;
-
-    var charCode = evt.keyCode || evt.which;
-    console.log(charCode)
-    if (charCode == 8 && annotationStyle == 0){
-      evt.preventDefault();
-      if (selectedNum > -1) { // only splice array when item is found
-        imgAnnotations.splice(selectedNum, 1); // 2nd parameter means remove one item only
-        numAnnotations -= 1;
-        selectedNum = -1;
-        dispImg(0)
-      } else if (imgAnnotations.length > 0) {
-        imgAnnotations.pop()
-        numAnnotations -= 1;
-        dispImg(0)
-      }
-    } else if (charCode == 13 && annotationStyle == 1){
-      evt.preventDefault();
-      if (clickPts.length > 2){
-        imgAnnotations.push(JSON.parse(JSON.stringify(clickPts)));
-        imgAnnotations[imgAnnotations.length-1].push(labelNum)
-        clickPts = []
-        makingPoly = false;
-        dispImg(0)
-      }
-    } else if (charCode == 39 || charCode == 32){
-      evt.preventDefault();
-      next()
-    } else if (charCode == 37){
-      evt.preventDefault();
-      previous()
-    }
-  };
-
-  function clear(){
-    console.log("clear")
-    imgAnnotations = []
-    unsavedChanges = true;
-    dispImg(0)
-  }
-  function erase(){
-    if (annotationStyle == 1) {
-      if (document.getElementById("erase").value == "erase"){
-        document.getElementById("erase").value = "draw"
-        labelNum = 0;
-      } else {
-        document.getElementById("erase").value = "erase"
-        labelNum = 1
-      }
-    } else {
-      if (selectedNum > -1) { // only splice array when item is found
-        imgAnnotations.splice(selectedNum, 1); // 2nd parameter means remove one item only
-        numAnnotations -= 1;
-        selectedNum = -1;
-        dispImg(0)
-      } else if (imgAnnotations.length > 0) {
-        imgAnnotations.pop()
-        numAnnotations -= 1;
-        dispImg(0)
-
-      }
-    }
-  }
-
-  function addImgAnnotations(){
-    let i=0;
-    let res = [];
-    while (i<imgAnnotations.length){
-      res.push([[Math.round(imgAnnotations[i][0][0] / scale), Math.round(imgAnnotations[i][0][1] / scale)], [Math.round(imgAnnotations[i][1][0] / scale), Math.round(imgAnnotations[i][1][1] / scale)]]);
-      i+=1;
-    }
-    console.log("next saved", res)
-    oldAnnotations[fileName] = res;
-  }
+      // ctx.beginPath()
+      // // ctx.rect(0,0,1000, 1000)
+      // ctx.fill()
+      // ctx.stroke()
 
 
-  function next(){
-    if (fileNum < files.length-1){
-      fileNum += 1;
-      if (imgAnnotations.length > 0){
-        let res = []
-        addImgAnnotations();
-        if (annotationStyle == 1){
-          document.getElementById("annotMade").innerHTML = "Annotations made: " + Object.keys(oldAnnotations).length;
-        }
-      }
-      addFile(fileNum);
-      
-    }
-  }
-  function previous(){
-    if (fileNum > 0){
-      fileNum -= 1;
-      if (imgAnnotations.length > 0){
-        addImgAnnotations();
-        if (annotationStyle == 1){
-          document.getElementById("annotMade").innerHTML = "Annotations made: " + Object.keys(oldAnnotations).length;
-        }      
-      }
-      console.log("scale was", scale)
-      addFile(fileNum);
-      console.log("scale now", scale)
-
-      
-    }
-  } 
-  function exportJSON(){
-    addImgAnnotations()
-    // Create element with <a> tag
-    const link = document.createElement("a");
-    if (imgAnnotations.length > 0){
-      oldAnnotations[fileName] = JSON.parse(JSON.stringify(imgAnnotations));
-    }
-    content = JSON.stringify(oldAnnotations)
-    // Create a blog object with the file content which you want to add to the file
-    const file = new Blob([content], { type: 'application/JSON' });
-
-    // Add file content in the object URL
-    link.href = URL.createObjectURL(file);
-
-    // Add file name
-    link.download = "data.JSON";
-
-    // Add click event to <a> tag to save file.
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
-
-  function download2(img){
-    var link = document.createElement('a');
-    link.download = 'filename.png';
-    link.href = img;
-    link.click();
-  }
-
-  function countAnnoationsReal(){
-    realAnnotationsNum = 0
-    fNum = 0;
-    while (fNum < files.length){
-      file = files[fNum]
-      fNum += 1;
-      if (file.name in oldAnnotations) {
-        let annot = oldAnnotations[file.name]
-        realAnnotationsNum += annot.length;
-      }
-    }
-    console.log("annot", numAnnotations, realAnnotationsNum)
-    numAnnotations = realAnnotationsNum;
-    return realAnnotationsNum
-  }
-
-  function exportImg() {
-    document.getElementById("exportStatus").innerHTML = "Zipping images"
-    addImgAnnotations()
-    countAnnoationsReal();
-    const reader = new FileReader();
-    console.log("made new reader")
-    reader.addEventListener('load', function() {
-      console.log("loaded reader")
-
-      const zip = new JSZip();
-      let imgsMade = 0;
-      let fNum = 0
-      while (fNum < files.length){
-        file = files[fNum]
-        fNum += 1;
-        if (file.name in oldAnnotations) {
-          let fname = file.name
-          let annot = oldAnnotations[file.name]
-          const fileReader = new FileReader();
-          fileReader.readAsDataURL(file);
-          fileReader.onload = function(event) {
-            // Load the image onto the canvas
-            const image = new Image();
-
-            image.src = event.target.result;
+}
 
 
-            image.onload = function() {
 
-              for (i in annot) {
-                let ia = annot[i]
-                let tempCanvas = document.createElement("canvas");
-                let tCtx = tempCanvas.getContext("2d");
-                tempCanvas.width = ia[1][0]-ia[0][0];
-                tempCanvas.height = ia[1][1]-ia[0][1];
-                tCtx.drawImage(image,-ia[0][0],-ia[0][1]);
-                tempCanvas.style.position = "absolute";
-                tempCanvas.style.position.top = "0px"
-                tempCanvas.style.position.left = "0px"
-                tempCanvas.toBlob(function(blob) {
-                zip.file("annot_" + imgsMade + ".jpg", blob);
-                imgsMade += 1
-                document.getElementById("exportStatus").innerHTML = "Zipped: " + imgsMade + "/" + numAnnotations
-                if (imgsMade == numAnnotations){
-                  zip.generateAsync({ type: "blob" }).then(content => {
-                    const blob = new Blob([content], { type: "application/zip" });
-                    const link = document.createElement("a");
-                    link.href = URL.createObjectURL(blob);
-                    link.download = "images.zip";
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    document.getElementById("exportStatus").innerHTML = "Done exporting images"
 
-                  });
-                }
-              });
-                console.log("exported")
-              }
-            }
-          }
-        }
-      }
-    });
 
-    reader.readAsText(file);
-
-  }
-
-  function exportImgZip(){
-    // Create a new instance of JSZip
-    const zip = new JSZip();
-    // Draw a red rectangle on top of the canvas image
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = "red";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // Add the canvas image to the zip file
-    canvas.toBlob(function(blob) {
-      zip.file(inputFile.files[0].name, blob);
-      // Generate the zip file and trigger the download
-      zip.generateAsync({ type: "blob" }).then(content => {
-        const blob = new Blob([content], { type: "application/zip" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "images.zip";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      });
-    });
-  }
-
-  const actionButtons = {"clear": clear, "erase": erase, "next": next, "prev": previous, "exportJSON": exportJSON, "exportImg": exportImg};
-  ht = 100
-  for (const i in actionButtons){
+const actionButtons = {"clear": clear, "erase": erase, "next": next, "prev": previous, "exportJSON": exportJSON} //"exportText": exportText, "exportImg": exportImg};
+ht = 100
+for (const i in actionButtons){
     const a = document.getElementById(i);
     a.style.height="40px";
     a.style.fontSize="20";
@@ -649,14 +410,16 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
     a.onclick=function (){
       console.log("buttoned");
     actionButtons[i]();}
-  }
+}
 
-  if (annotationStyle == 0){
+if (annotType == 0){
     document.getElementById("erase").value = "delete"
-  }
+}
 
 
-  window.addEventListener("beforeunload", function (e) {
+
+
+window.addEventListener("beforeunload", function (e) {
     if (unsavedChanges){
       var confirmationMessage = 'It looks like you have been editing something. '
                               + 'If you leave before saving, your changes will be lost.';
@@ -666,13 +429,14 @@ JSON Labels: <input type="file" id="annot-input" buttonText="balh"><br>
     }
 });
 
-  function updateTimer(){
+function updateTimer(){
     document.getElementById("annotTime").innerHTML = "Time spent: " + Math.floor(totalTime / 60000) + "m " + Math.floor((totalTime/1000) % 60) + "s"
-  }
+}
 
 
   setInterval(updateTimer, 1000)
 
 
-  prepareCanvas()
+prepareCanvas();
+
 </script>
